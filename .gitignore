@@ -1,0 +1,14 @@
+# all files in this directory will be ignored by git
+
+# auxiliary files
+**.lprof
+**.pyc
+
+
+# data files
+**.npy
+
+# image files
+**.jpg
+**.png
+**.gif
