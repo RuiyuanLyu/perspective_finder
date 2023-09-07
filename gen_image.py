@@ -8,6 +8,7 @@ import cv2
 import matplotlib.pyplot as plt
 import utils
 from path_finder import find_path
+import shutil
 
 data_dir = "/datax/3rscan/0a4b8ef6-a83a-21f2-8672-dce34dd0d7ca/"
 # data_dir = "/datax/3rscan/0ad2d3a1-79e2-2212-9b99-a96495d9f7fe"
@@ -35,8 +36,10 @@ SEMANTIC_VISUAL_FILE = "labels.instances.annotated.v2.ply"
 OVER_SEG_FILE = "mesh.refined.0.010000.segs.v2.json"
 INSTANCE_SEG_FILE = "semseg.v2.json"
 instance_labels_to_remove = ["wall", "floor", "ceiling"]
-# remove the output screenshots
-os.system("rm -rf {}/*".format(render_output_dir))
+# remove the rendered output and create a new directory
+if os.path.exists(render_output_dir):
+    shutil.rmtree(render_output_dir, ignore_errors=True)
+os.mkdir(render_output_dir)
 ##########################################################################################
 # preparation complete
 ##########################################################################################

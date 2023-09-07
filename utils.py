@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import copy 
 
 VISUALIZATION_FOLDER = "visualization"
+if not os.path.exists(VISUALIZATION_FOLDER):
+    os.mkdir(VISUALIZATION_FOLDER)
 
 ####################################################################################
 # visualization utils
