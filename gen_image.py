@@ -45,32 +45,6 @@ os.mkdir(render_output_dir)
 ##########################################################################################
 # now load the data
 
-mesh = o3d.io.read_triangle_mesh(os.path.join(data_dir, MESH_FILE))
-mesh_over = o3d.io.read_triangle_mesh(os.path.join(data_dir, OVER_SEG_FILE))
-semseg = json.load(open(os.path.join(data_dir, INSTANCE_SEG_FILE)))
-seg_groups = semseg["segGroups"]
-seg_groups = [seg_group for seg_group in seg_groups if seg_group["label"] not in instance_labels_to_remove]
-for seg_group in seg_groups:
-    print(seg_group["label"])
-
-
-point_cloud = o3d.io.read_point_cloud(os.path.join(data_dir, SEMANTIC_VISUAL_FILE))
-
-# Visualize the original and pillarized point clouds
-# print("pillarized_point_cloud: {}".format(pillarized_point_cloud))
-# o3d.visualization.draw_geometries([pillarized_point_cloud])
-
-
-
-# outliers = utils.find_outlier_indices(np.array(mesh.vertices), 1.5)
-# print("outliers: {}".format(outliers))
-# exit(0)
-
-
-main_info = []
-for seg_group in seg_groups:
-    main_info.append(utils.convert_seg_group(seg_group))
-
 
 def get_obb_frame(obb_idx):
     assert obb_idx < len(seg_groups)
@@ -85,19 +59,15 @@ def get_obb_frame(obb_idx):
     obb_frame.paint_uniform_color([1, 0, 0])  # 设置边框颜色
     return obb_frame
 
+
 def show_obb(mesh, obb_idx):
     obb_frame = get_obb_frame(obb_idx)
     o3d.visualization.draw_geometries([mesh, obb_frame])
 
-# show_obb(mesh, 0)
 
-world_center = (np.max(np.array(mesh.vertices), axis=0) + np.min(np.array(mesh.vertices), axis=0))/2
-    
-
-
-def generate_rendered_pictures(mesh, extrinsic_trajectory=None):
+def generate_rendered_pictures(mesh, extrinsic_trajectory=None, visible_window=True):
     vis = o3d.visualization.Visualizer()
-    vis.create_window()
+    vis.create_window(visible=visible_window)
     # 创建一个摄像机并设置参数
     ctr = vis.get_view_control()
     vis.add_geometry(mesh)
@@ -111,8 +81,7 @@ def generate_rendered_pictures(mesh, extrinsic_trajectory=None):
     if extrinsic_trajectory is not None:
         num_views = len(extrinsic_trajectory)
     else:
-        num_views = 10
-    ctr = vis.get_view_control()
+        num_views = 20
     print("initial view extrinsic: \n{}".format(
         ctr.convert_to_pinhole_camera_parameters().extrinsic))
     for i in range(num_views):
@@ -140,6 +109,7 @@ def generate_rendered_pictures(mesh, extrinsic_trajectory=None):
         vis.poll_events()
         vis.update_renderer()
         vis.capture_screen_image(os.path.join(render_output_dir, "screenshot_{}.png".format(i)))
+    print("finished rendering %d images" % num_views)
     vis.destroy_window()
 
 
@@ -181,7 +151,23 @@ def make_camera_trajectory(point_cloud, height, pillar_resolution=0.1, num_views
         output_trajectory.append(extrinsic)
     return output_trajectory
 
-extrinsic_trajectory = make_camera_trajectory(point_cloud, height=0.2, pillar_resolution=0.1, num_views=20)
-generate_rendered_pictures(mesh, extrinsic_trajectory)
-utils.visualize_camera_extrinsics(mesh, extrinsic_trajectory)
+
+if __name__ == "__main__":
+    mesh = o3d.io.read_triangle_mesh(os.path.join(data_dir, MESH_FILE))
+    mesh_over = o3d.io.read_triangle_mesh(os.path.join(data_dir, OVER_SEG_FILE))
+    semseg = json.load(open(os.path.join(data_dir, INSTANCE_SEG_FILE)))
+    seg_groups = semseg["segGroups"]
+    seg_groups = [seg_group for seg_group in seg_groups if seg_group["label"] not in instance_labels_to_remove]
+    for seg_group in seg_groups:
+        print(seg_group["label"])
+    point_cloud = o3d.io.read_point_cloud(os.path.join(data_dir, SEMANTIC_VISUAL_FILE))
+
+    main_info = []
+    for seg_group in seg_groups:
+        main_info.append(utils.convert_seg_group(seg_group))
+
+    world_center = (np.max(np.array(mesh.vertices), axis=0) + np.min(np.array(mesh.vertices), axis=0))/2
+    extrinsic_trajectory = make_camera_trajectory(point_cloud, height=0.2, pillar_resolution=0.1, num_views=20)
+    generate_rendered_pictures(mesh, extrinsic_trajectory)
+    utils.visualize_camera_extrinsics(mesh, extrinsic_trajectory)
 

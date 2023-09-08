@@ -1,5 +1,8 @@
 # all files in this directory will be ignored by git
 
+# test_files
+test.py
+
 # auxiliary files
 **.lprof
 **.pyc
