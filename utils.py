@@ -779,6 +779,42 @@ def get_vision_cone(intrinsic, extrinsic):
     return corners, coord
 
 
+def get_nearest_point(hero, neighbours):
+    """
+        hero: the hero to be compared with, 3
+        neighbours: the redisual points, n x 3
+        returns: the nearest point, 3
+    """
+    distances = np.linalg.norm(neighbours - hero, axis=1)
+    nearest_index = np.argmin(distances)
+    return neighbours[nearest_index]
+
+
+def move_away_from_neighbours(hero, neighbours, target_distance=0.2, step_size=0.05, max_iter=100, freeze_z=True):
+    """
+        hero: the hero to be moved, 3
+        neighbours: the redisual points, n x 3
+        target_distance: the distance to be kept from the neighbours
+        step_size: the step size to move
+        max_iter: the maximum number of iterations
+        returns: the moved hero, 3
+    """
+    hero_refined = hero.copy()
+    while max_iter > 0:
+        nearest_point = get_nearest_point(hero_refined, neighbours)
+        distance = np.linalg.norm(hero_refined - nearest_point)
+        if distance > target_distance:
+            break
+        # print("distance: {}".format(distance))
+        step_direction = hero_refined - nearest_point
+        if freeze_z:
+            step_direction[2] = 0
+        step_direction = step_direction / np.linalg.norm(step_direction)
+        hero_refined += step_direction * step_size
+        max_iter -= 1
+    return hero_refined
+
+
 # @profile
 def is_in_cone_by_camera_params(pointcloud, intrinsic, extrinsic, hidden_point_removal=False, cone_depth=10000):
     """

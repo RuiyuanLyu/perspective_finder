@@ -9,6 +9,7 @@ import gen_image
 DATA_PATH = "/datax/matterport/17DRP5sb8fy_region0/"
 INTRINSICS_DIR = os.path.join(DATA_PATH, "camera_intrinsics")
 POINTCLOUD_PATH = os.path.join(DATA_PATH, "segmentations", "region0.ply")
+# POINTCLOUD_PATH = "/datax/3rscan/0a4b8ef6-a83a-21f2-8672-dce34dd0d7ca/labels.instances.annotated.v2.ply"
 EXTRINSICS_DIR = os.path.join(DATA_PATH, "camera_poses")
 
 
@@ -79,7 +80,8 @@ def select_views(pointcloud, intrinsics, extrinsics, target_coverage=0.99, max_v
     for i in range(num_views):
         boolean_vec = utils.is_in_cone_by_camera_params(pointcloud, intrinsics[i], extrinsics[i], hidden_point_removal=hidden_point_removal)
         boolean_vecs.append(boolean_vec)
-        print("view {}: {}/{}".format(i, np.sum(boolean_vec), num_points))
+        # print("view {}: {}/{}".format(i, np.sum(boolean_vec), num_points))
+    print("num_views to select: {}".format(num_views))
     boolean_vecs = np.array(boolean_vecs)
     selected_view_indices = coverage_solver(boolean_vecs, target_coverage, max_views)
     return selected_view_indices
@@ -100,7 +102,11 @@ def generate_seed_candidates(pointcloud, percentile=98):
     seed_candidates = []
     for x in x_candidates[1:-1]:
         for y in y_candidates[1:-1]:
-            seed_candidates.append(np.array([x, y, z_candidate]))
+            candidate = np.array([x, y, z_candidate])
+            candidate_refined = utils.move_away_from_neighbours(candidate, np.array(pointcloud.points), target_distance=0.5)
+            if np.any(np.abs(candidate_refined - candidate) > 1e-6):
+                print("candidate: {} -> {}".format(candidate, candidate_refined))
+            seed_candidates.append(np.array(candidate_refined))
     return seed_candidates
 
 
@@ -167,10 +173,10 @@ if __name__ == "__main__":
     intrinsic = get_intrinsic(pcd)
     intrinsics = [intrinsic] * len(extrinsics)
 
-    selected_indices = select_views(pcd, intrinsics, extrinsics, target_coverage=0.99, max_views=10000, hidden_point_removal=False)
+    selected_indices = select_views(pcd, intrinsics, extrinsics, target_coverage=0.999, max_views=10000, hidden_point_removal=False)
     selected_camera_extrinsics = [extrinsics[i] for i in selected_indices]
     utils.visualize_camera_extrinsics(pcd, selected_camera_extrinsics, add_coordinate_frame=False)
-    gen_image.generate_rendered_pictures(original_mesh, selected_camera_extrinsics, wait_time=1)
+    gen_image.generate_rendered_pictures(original_mesh, selected_camera_extrinsics, visible_window=True, wait_time=0)
 
 
 
