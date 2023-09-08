@@ -131,13 +131,17 @@ def visualize_camera_seen_points(background, camera_extrinsic, points, point_col
     
     # draw the background
     modified_background = copy.deepcopy(background)
-    modified_background.paint_uniform_color([0.5, 0.5, 0.5])
     if point_colors is None:
-        point_colors = [0, 0, 1]
-    individual_colors = np.array([point_colors if p else [0.5, 0.5, 0.5] for p in points])
+        point_colors = [1, 0, 0]
+    individual_colors = np.array([point_colors if p else [0.7, 0.7, 0.7] for p in points])
     modified_background.colors = o3d.utility.Vector3dVector(individual_colors)
     vis.add_geometry(modified_background)
     # visualize
+    param = ctr.convert_to_pinhole_camera_parameters()
+    param.extrinsic = camera_extrinsic
+    ctr.convert_from_pinhole_camera_parameters(param)
+    vis.poll_events()
+    vis.update_renderer()
     vis.run()
 
 
@@ -803,7 +807,7 @@ def is_in_cone_by_camera_params(pointcloud, intrinsic, extrinsic, hidden_point_r
     output_indices = np.logical_and(output_indices, points_2d[:, 0] < xmax)
     output_indices = np.logical_and(output_indices, points_2d[:, 1] >= 0)
     output_indices = np.logical_and(output_indices, points_2d[:, 1] < ymax)
-
+    # visualize_camera_seen_points(pointcloud, extrinsic, output_indices)
     return output_indices
 
 

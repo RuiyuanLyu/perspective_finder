@@ -170,7 +170,7 @@ if __name__ == "__main__":
     selected_indices = select_views(pcd, intrinsics, extrinsics, target_coverage=0.99, max_views=10000, hidden_point_removal=False)
     selected_camera_extrinsics = [extrinsics[i] for i in selected_indices]
     utils.visualize_camera_extrinsics(pcd, selected_camera_extrinsics, add_coordinate_frame=False)
-    gen_image.generate_rendered_pictures(original_mesh, selected_camera_extrinsics)
+    gen_image.generate_rendered_pictures(original_mesh, selected_camera_extrinsics, wait_time=1)
 
 
 
