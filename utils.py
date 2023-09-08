@@ -8,9 +8,13 @@ import cv2
 import matplotlib.pyplot as plt
 import copy 
 
+O3D_VERSION = o3d.__version__.split(".")[1]
+print("open3d version: {}".format(O3D_VERSION))
 VISUALIZATION_FOLDER = "visualization"
-if not os.path.exists(VISUALIZATION_FOLDER):
-    os.mkdir(VISUALIZATION_FOLDER)
+if os.path.exists(VISUALIZATION_FOLDER):
+    import shutil
+    shutil.rmtree(VISUALIZATION_FOLDER, ignore_errors=True)
+os.mkdir(VISUALIZATION_FOLDER)
 
 ####################################################################################
 # visualization utils
@@ -289,7 +293,10 @@ def get_arrow(begin=[0,0,0],vec=[0,0,1]):
     mesh_sphere_end.compute_vertex_normals()
  
     rot_mat = caculate_align_mat(vec_Arr)
-    mesh_arrow.rotate(rot_mat, center=False)
+    if O3D_VERSION == "9":
+        mesh_arrow.rotate(rot_mat, center=False)
+    else:
+        mesh_arrow.rotate(rot_mat)
     mesh_arrow.translate(np.array(begin))  # 0.5*(np.array(end) - np.array(begin))
     return mesh_frame, mesh_arrow, mesh_sphere_begin, mesh_sphere_end
 

@@ -10,6 +10,7 @@ import utils
 from path_finder import find_path
 import shutil
 
+O3D_VERSION = utils.O3D_VERSION
 data_dir = "/datax/3rscan/0a4b8ef6-a83a-21f2-8672-dce34dd0d7ca/"
 # data_dir = "/datax/3rscan/0ad2d3a1-79e2-2212-9b99-a96495d9f7fe"
 render_output_dir = 'render_output/'
@@ -97,13 +98,19 @@ def generate_rendered_pictures(mesh, extrinsic_trajectory=None, visible_window=T
             param = ctr.convert_to_pinhole_camera_parameters()
             param.extrinsic = extrinsic_trajectory[i]
             # print("input view extrinsic: \n{}".format(param.extrinsic))
-            ctr.convert_from_pinhole_camera_parameters(param)
+            if O3D_VERSION == "9":
+                ctr.convert_from_pinhole_camera_parameters(param)
+            else:
+                ctr.convert_from_pinhole_camera_parameters(param, True)
         else:
             param = ctr.convert_to_pinhole_camera_parameters()
             extrinsic = np.array(param.extrinsic).reshape(4, 4)
             extrinsic[:3, 3] += np.array([0.1, 0.1, 0.1])
             param.extrinsic = extrinsic
-            ctr.convert_from_pinhole_camera_parameters(param)
+            if O3D_VERSION == "9":
+                ctr.convert_from_pinhole_camera_parameters(param)
+            else:
+                ctr.convert_from_pinhole_camera_parameters(param, True)
         # print("result view extrinsic: \n{}".format(
         #     ctr.convert_to_pinhole_camera_parameters().extrinsic))
         vis.poll_events()
@@ -153,7 +160,10 @@ def make_camera_trajectory(point_cloud, height, pillar_resolution=0.1, num_views
 
 
 if __name__ == "__main__":
-    mesh = o3d.io.read_triangle_mesh(os.path.join(data_dir, MESH_FILE))
+    if O3D_VERSION == "9":
+        mesh = o3d.io.read_triangle_mesh(os.path.join(data_dir, MESH_FILE))
+    else:
+        mesh = o3d.io.read_triangle_mesh(os.path.join(data_dir, MESH_FILE), True)
     mesh_over = o3d.io.read_triangle_mesh(os.path.join(data_dir, OVER_SEG_FILE))
     semseg = json.load(open(os.path.join(data_dir, INSTANCE_SEG_FILE)))
     seg_groups = semseg["segGroups"]
