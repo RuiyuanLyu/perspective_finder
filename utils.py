@@ -102,7 +102,6 @@ def visualize_camera_extrinsics(background, camera_extrinsics, add_coordinate_fr
     """
     vis = o3d.visualization.Visualizer()
     vis.create_window()
-    ctr = vis.get_view_control()
     vis.add_geometry(background)
     for i in range(len(camera_extrinsics)):
         extrinsic = camera_extrinsics[i]
@@ -647,6 +646,7 @@ def compute_extrinsic_matrix(lookat_point, camera_coords):
         lookat_point: 3D point in world coordinate
         camera_coords: 3D point in world coordinate
         NOTE: the camera convention is xyz:RDF
+        return: 4 x 4 extrinsic matrix, world coord -> camera coord
     """
     camera_direction = lookat_point - camera_coords
     camera_direction_normalized = camera_direction / np.linalg.norm(camera_direction)
@@ -664,7 +664,7 @@ def compute_extrinsic_matrix(lookat_point, camera_coords):
 
 def extrinsic_to_coord_and_lookat(extrinsic):
     """
-        extrinsic: 4*4 numpy array, world coordinate to camera coordinate
+        extrinsic: 4*4 numpy array, world coord -> camera coord
         return: camera_coords, lookat_point
     """
     camera_direction_normalized = extrinsic[2, :3]
@@ -676,6 +676,7 @@ def extrinsic_to_coord_and_lookat(extrinsic):
 def draw_camera(camera_pose):
     """
         camera_pose: 4*4 numpy array, camera coordinate to world coordinate
+        provided by Xiaohan
     """
     zhui = np.array([[0,0,0], [0, 0, 1]]) # [[0,0,0], [-0.5, -0.5, 1], [0.5, -0.5, 1], [-0.5, 0.5, 1], [0.5, 0.5, 1]])
     aa = o3d.geometry.PointCloud(points = o3d.utility.Vector3dVector(zhui))
@@ -818,9 +819,9 @@ def move_away_from_neighbours(hero, neighbours, target_distance=0.2, step_size=0
 # @profile
 def is_in_cone_by_camera_params(pointcloud, intrinsic, extrinsic, hidden_point_removal=False, cone_depth=10000):
     """
-        pointcloud: o3d.geometry.PointCloud
-        intrinsic: dict
-        extrinsic: 4 x 4
+        pointcloud: o3d.geometry.PointCloud, contains n points
+        intrinsic: dict, not the matrix
+        extrinsic: 4 x 4 matrix, world coord -> camera coord
         returns: n x 1 bool array
     """
     points = np.array(pointcloud.points)
