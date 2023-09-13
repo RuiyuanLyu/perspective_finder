@@ -144,9 +144,10 @@ def make_camera_trajectory(point_cloud, height, interest_points=None, pillar_res
     touchable_map = (dense_map > 0) - edge_map
     utils.remove_small_islands(touchable_map, 15)
     if interest_points is not None:
-        interest_points = ((interest_points[:,:2] - np.min(point_cloud.points[:,:2], axis=0)) / pillar_resolution).astype(np.int32)
+        points = np.array(point_cloud.points)
+        interest_points = ((interest_points[:,:2] - np.min(points[:,:2], axis=0)) / pillar_resolution).astype(np.int32)
     path = find_path(touchable_map, interest_points_to_look=interest_points)
-    utils.visualize_path(path, edge_map + touchable_map*0.3, show=False)
+    utils.visualize_path(path, edge_map + touchable_map*0.3, show=False, interest_points=interest_points)
     control_points = []
     for node in path:
         x, y = node.x, node.y
@@ -182,14 +183,15 @@ if __name__ == "__main__":
     point_cloud = o3d.io.read_point_cloud(
         os.path.join(DATA_DIR, SEMANTIC_VISUAL_FILE))
 
-    main_info = []
-    for seg_group in seg_groups:
-        main_info.append(utils.convert_seg_group(seg_group))
-
+    # main_info = []
+    # for seg_group in seg_groups:
+    #     main_info.append(utils.convert_seg_group(seg_group))
+    intestest_points = np.array([seg_group["obb"]["centroid"] for seg_group in seg_groups])
+    print("intestest_points.shape", intestest_points.shape)
     world_center = (np.max(np.array(mesh.vertices), axis=0) +
                     np.min(np.array(mesh.vertices), axis=0))/2
     extrinsic_trajectory = make_camera_trajectory(
-        point_cloud, height=0.2, pillar_resolution=0.1, num_views=20, interest_points=np.array(main_info)[:, :3])
+        point_cloud, height=0.2, pillar_resolution=0.1, num_views=20, interest_points=intestest_points)
     generate_rendered_pictures(mesh, extrinsic_trajectory)
     # generate_rendered_pictures(mesh)
     utils.visualize_camera_extrinsics(mesh, extrinsic_trajectory)

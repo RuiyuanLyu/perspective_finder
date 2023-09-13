@@ -32,7 +32,7 @@ class Node:
 
     def is_goal(self, input_map, interest_points_to_look):
         percentage = np.sum(self.covered_map) / np.sum(input_map)
-        interest_looked = np.all(self.covered_map[interest_points_to_look])
+        interest_looked = np.all(self.covered_map[interest_points_to_look[:, 0], interest_points_to_look[:, 1]])
         return percentage >= GOAL_PERCENTAGE and interest_looked
 
     def __eq__(self, other):
@@ -51,12 +51,12 @@ def astar_search(start_points, input_map, no_collision_map=None, interest_points
         no_collision_map = utils.compute_no_collision_map(
             input_map, HERO_RADIUS)
     interest_map = np.zeros_like(input_map)
-    if interest_points_to_look:
+    if interest_points_to_look is not None:
         interest_map = utils.sparse_to_dense_with_default(
-            interest_points_to_look, interest_map, 1)
+            interest_points_to_look, interest_map.shape, 1)
         input_map = np.logical_or(input_map, interest_map)
     else:
-        interest_points_to_look = []
+        interest_points_to_look = np.empty((0, 2), dtype=np.int32)
 
     open_list = []
     closed_list = []
@@ -70,7 +70,7 @@ def astar_search(start_points, input_map, no_collision_map=None, interest_points
         patience_count += 1
         current_node = min(open_list, key=lambda node: node.f())
         current_coverage = np.sum(current_node.covered_map) / np.sum(input_map)
-        current_num_viewed_interests = np.sum(current_node.covered_map[interest_points_to_look])
+        current_num_viewed_interests = np.sum(current_node.covered_map[interest_points_to_look[:, 0], interest_points_to_look[:, 1]])
         if current_coverage > best_coverage or iter_count % print_interval == 0:
             if current_coverage > best_coverage:
                 best_coverage = current_coverage
@@ -83,7 +83,7 @@ def astar_search(start_points, input_map, no_collision_map=None, interest_points
         open_list.remove(current_node)
         closed_list.append(current_node)
 
-        if best_coverage >= GOAL_PERCENTAGE or iter_count > max_iter or patience_count > patience:
+        if current_node.is_goal(input_map, interest_points_to_look) or iter_count > max_iter or patience_count > patience:
             break
 
         neighbors = get_neighbors(current_node, input_map, no_collision_map)

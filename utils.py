@@ -66,13 +66,31 @@ def visualize_2d_map(data, title=None, xlabel=None, ylabel=None, save=True, show
     plt.close()
 
 
-def visualize_path(path, background, path_alpha=0.2, show=True, save=True, total_time=None):
+def visualize_path(path, background, path_alpha=0.2, show=True, save=True, total_time=None, interest_points=None):
+    """
+        path: a list of Node
+        background: 2D numpy array
+        path_alpha: the show alpha value of the path
+        show: whether to show the visualization
+        save: whether to save the visualization
+        total_time: the total time of the animation
+        interest_points: the interest points to visualize, shape: (n, 2) numpy array
+    """
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
     fig, ax = plt.subplots()
     def update(frame):
         if frame == 0:
             ax.clear()
+        if interest_points is not None:
+            # interest_points: n x 2 numpy array
+            covered_map = path[frame].covered_map
+            interest_map = sparse_to_dense_with_default(interest_points, covered_map.shape, 1)
+            seen_points = np.array(np.where(np.logical_and(covered_map, interest_map))).T
+            not_seen_points = np.array(np.where(np.logical_and(np.logical_not(covered_map), interest_map))).T
+            # print("seen points: %d, not seen points: %d" % (seen_points.shape[0], not_seen_points.shape[0]))
+            ax.scatter(seen_points[:, 0], seen_points[:, 1], c="b")
+            ax.scatter(not_seen_points[:, 0], not_seen_points[:, 1], c="g")
         ax.imshow(background.T, origin="lower")
         ax.imshow(path[frame].covered_map.T, origin="lower", alpha=path_alpha)
         ax.scatter(path[frame].x, path[frame].y, c="r")
@@ -80,7 +98,6 @@ def visualize_path(path, background, path_alpha=0.2, show=True, save=True, total
         ax.set_ylabel("y")
         if frame > 0:
             x1, y1, x2, y2 = path[frame-1].x, path[frame-1].y, path[frame].x, path[frame].y
-            # print(x1, y1, "->", x2, y2)
             ax.plot([x1, x2], [y1, y2], c="r")
         ax.set_title("step: %d" % frame)
     
@@ -499,8 +516,9 @@ def sparse_to_dense_with_default(sparse_list, map_size, default_value):
     """
         sparse_list: [(x1, y1), (x2, y2), ...]
     """
+    sparse_list = np.array(sparse_list)
     dense_map = np.zeros(map_size)
-    dense_map[sparse_list] = default_value
+    dense_map[sparse_list[:, 0], sparse_list[:, 1]] = default_value
     return dense_map
 
 
