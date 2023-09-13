@@ -4,14 +4,43 @@
 # the imput is 2d array, a input_map of the scene, 0: void, 1: ground
 import numpy as np
 import utils
+from tqdm import tqdm
 
 HERO_RADIUS = 1.5
-MOVE_SPEED = 5
+MOVE_SPEED = 8
 ANGLE_SPEED = np.pi/4
-VISION_RANGE = 10
+VISION_RANGE = 15
 VISION_ANGLE = np.pi/2  # twice of half angle
 VISION_AREA = VISION_RANGE**2 * VISION_ANGLE
 GOAL_PERCENTAGE = 0.6
+
+
+class MyList(dict):
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+
+    def __getitem__(self, idx):
+        key = list(self.keys())[idx]
+        return super().__getitem__(key)
+
+    def append(self, value):
+        key = hash(value)
+        self[key] = value
+
+    def extend(self, values):
+        for value in values:
+            self.append(value)
+
+    def __contains__(self, __value: object) -> bool:
+        key = hash(__value)
+        return super().__contains__(key)
+    
+    def remove(self, __value: object) -> None:
+        key = hash(__value)
+        super().__delitem__(key)
+    
+    def sort(self, key=None, reverse=False):
+        self.__dict__ = dict(sorted(self.__dict__.items(), key=key, reverse=reverse))
 
 
 class Node:
@@ -42,11 +71,17 @@ class Node:
         #     print("an equal node found")
         return ans
 
+    def __lt__(self, other):
+        return self.f() < other.f()
+
     def __str__(self):
         return "(x: %d, y: %d, move_angle: %.2f, look_angle: %.2f)" % (self.x, self.y, self.move_angle, self.look_angle)
+    
+    def __hash__(self) -> int:
+        return hash((self.x, self.y, self.move_angle, self.look_angle, tuple(self.covered_map.reshape(-1))))
 
-
-def astar_search(start_points, input_map, no_collision_map=None, interest_points_to_look=None, add_new_seeds=False, max_iter=10000, patience=1000, print_interval=1000):
+@profile
+def astar_search(start_points, input_map, no_collision_map=None, interest_points_to_look=None, add_new_seeds=False, max_iter=10000, patience=1000):
     if no_collision_map is None:
         no_collision_map = utils.compute_no_collision_map(
             input_map, HERO_RADIUS)
@@ -58,28 +93,36 @@ def astar_search(start_points, input_map, no_collision_map=None, interest_points
     else:
         interest_points_to_look = np.empty((0, 2), dtype=np.int32)
 
-    open_list = []
+    open_list = MyList()
     closed_list = []
     open_list.extend(start_points)
     best_coverage = 0
+    best_num_viewed_interests = 0
     iter_count = 0
     patience_count = 0
 
+    pbar = tqdm(total=max_iter)
     while open_list:
         iter_count += 1
         patience_count += 1
-        current_node = min(open_list, key=lambda node: node.f())
+        open_list.sort()
+        # print(open_list)
+        # if len(open_list) > max_iter:
+        #     open_list = open_list[:max_iter]
+        current_node = open_list[0]
+        print("current node f: %.2f, g: %.2f, h: %.2f" % (current_node.f(), current_node.g, current_node.h))
+        # print("current node: " + str(current_node))
         current_coverage = np.sum(current_node.covered_map) / np.sum(input_map)
         current_num_viewed_interests = np.sum(current_node.covered_map[interest_points_to_look[:, 0], interest_points_to_look[:, 1]])
-        if current_coverage > best_coverage or iter_count % print_interval == 0:
+        if current_coverage > best_coverage:
             if current_coverage > best_coverage:
                 best_coverage = current_coverage
                 patience_count = 0
-            print("iter %d, current best coverage: %.2f%%" %
-                  (iter_count, best_coverage * 100))
-            print("num of interest points viewed: %d/%d" %
-                  (current_num_viewed_interests, len(interest_points_to_look)))
             best_node = current_node
+            best_num_viewed_interests = current_num_viewed_interests
+        pbar.update(1)
+        pbar.set_description("open list size: %d, current best coverage: %.2f%%, num of interest points viewed: %d/%d" % (
+            len(open_list), best_coverage*100, best_num_viewed_interests, len(interest_points_to_look)))
         open_list.remove(current_node)
         closed_list.append(current_node)
 
@@ -144,14 +187,14 @@ def get_neighbors(node, input_map, no_collision_map, move_speed=MOVE_SPEED, angl
     # 生成相邻节点
     neighbors = []
     # utils.visualize_2d_map(input_map_to_show, save=False, show=True)
-    for i in range(feasible_map.shape[0]):
-        for j in range(feasible_map.shape[1]):
-            if feasible_map[i, j]:
-                new_move_angle = utils.subtract_angle(angle_map[i, j], -node.move_angle)
+    for x in range(feasible_map.shape[0]):
+        for y in range(feasible_map.shape[1]):
+            if feasible_map[x, y]:
+                new_move_angle = utils.subtract_angle(angle_map[x, y], -node.move_angle)
                 # get the new look angle
                 for k in range(5):
                     new_look_angle = utils.subtract_angle(node.look_angle, (k-2)*angle_speed)
-                    neighbors.append(Node(i, j, new_move_angle, new_look_angle, input_map, node))
+                    neighbors.append(Node(x, y, new_move_angle, new_look_angle, input_map, node))
                     # print("new neighbor:" + str(neighbors[-1]))
 
     return neighbors
@@ -161,23 +204,27 @@ def heuristic(node, input_map, interest_points_to_look=None):
     # 估计从当前节点到看见整个地图的代价
     overall_num = np.sum(input_map)
     covered_num = np.sum(node.covered_map)
-    cover_cost = (overall_num - covered_num) / VISION_AREA * \
-        4  # 4 is a hyperparameter to adjust
-    # 估计从当前节点到看见所有感兴趣点的代价
+    cover_cost = (overall_num - covered_num) / VISION_AREA * 4 # 1 is a hyperparameter to adjust
+    cover_cost = np.ceil(cover_cost)
+    # 估计从当前节点到看见所有感兴趣点的移动和转角代价
     if interest_points_to_look is None:
         return cover_cost
     interest_map = utils.sparse_to_dense_with_default(
         interest_points_to_look, np.zeros_like(input_map), 1)
     not_covered_interest_map = np.logical_and(
         interest_map, np.logical_not(node.covered_map))
-    not_covered_indices = np.array(np.where(not_covered_interest_map)).T
-    assert not_covered_indices.shape[1] == 2
-    dist_cost = 0
+    not_covered_indices = np.array(np.where(not_covered_interest_map)).T # shape (n, 2)
+    dist_cost, angle_cost = 0, 0
     if not_covered_indices.shape[0] == 0:
-        x_dists = not_covered_indices[:, 0] - node.x
-        y_dists = not_covered_indices[:, 1] - node.y
-        dist_cost += np.sum(np.abs(x_dists) + np.abs(y_dists)) / MOVE_SPEED
-    return cover_cost + dist_cost
+        dist_cost_map, angle_cost_map = utils.get_dist_map_and_angle_map(
+            node.x, node.y, input_map, node.look_angle)
+        dist_costs = dist_cost_map[interest_points_to_look[:, 0], interest_points_to_look[:, 1]]
+        angle_costs = np.abs(angle_cost_map[interest_points_to_look[:, 0], interest_points_to_look[:, 1]])
+        dist_costs, angle_costs = np.ceil(dist_costs), np.ceil(angle_costs)
+        dist_cost = np.sum(dist_costs) / MOVE_SPEED / 2
+        angle_cost = np.sum(angle_costs) / ANGLE_SPEED / 2 
+
+    return cover_cost + dist_cost + angle_cost
 
 
 def get_start_nodes(input_map, no_collision_map=None):
@@ -208,13 +255,23 @@ def get_start_nodes(input_map, no_collision_map=None):
     return output_nodes
 
 
-def find_path(input_map, no_collision_map=None, interest_points_to_look=None, add_new_seeds=False, max_iter=10000, patience=100, print_interval=1000):
+def find_path(input_map, no_collision_map=None, interest_points_to_look=None, add_new_seeds=False, max_iter=10000, patience=300):
+    """
+        input_map: 2d array, 0: void, 1: ground
+        no_collision_map: 2d array, 0: void, 1: accessible ground
+        interest_points_to_look: 2d array, shape (n, 2), the points to look
+        add_new_seeds: bool, whether to add new seeds during the search
+        max_iter: int, the maximum number of iterations
+        patience: int, the maximum number of iterations without improvement
+        print_interval: int, the interval to print the current best coverage
+        return: a list of nodes, the path
+    """
     if no_collision_map is None:
         no_collision_map = utils.compute_no_collision_map(
             input_map, HERO_RADIUS)
     start_nodes = get_start_nodes(input_map, no_collision_map)
     path = astar_search(start_nodes, input_map, no_collision_map,
-                        interest_points_to_look, add_new_seeds, max_iter, patience, print_interval)
+                        interest_points_to_look, add_new_seeds, max_iter, patience)
     return path
 
 
@@ -223,6 +280,6 @@ if __name__ == "__main__":
     PCD_FILE = "/datax/3rscan/0a4b8ef6-a83a-21f2-8672-dce34dd0d7ca/labels.instances.annotated.v2.ply"
     PCD = o3d.io.read_point_cloud(PCD_FILE)
     count_map, _, _ = utils.make_2d_count_map(PCD, 0.1)
-    _, _, MAP = utils.get_2d_dense_edge_touchable_map(count_map, 0.70)
+    _, _, MAP = utils.get_2d_dense_edge_touchable_map(count_map, 0.75)
     path = find_path(MAP)
     utils.visualize_path(path, MAP)

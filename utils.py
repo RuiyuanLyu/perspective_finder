@@ -80,10 +80,8 @@ def visualize_path(path, background, path_alpha=0.2, show=True, save=True, total
     from matplotlib.animation import FuncAnimation
     fig, ax = plt.subplots()
     def update(frame):
-        if frame == 0:
-            ax.clear()
+        ax.clear()
         if interest_points is not None:
-            # interest_points: n x 2 numpy array
             covered_map = path[frame].covered_map
             interest_map = sparse_to_dense_with_default(interest_points, covered_map.shape, 1)
             seen_points = np.array(np.where(np.logical_and(covered_map, interest_map))).T
@@ -93,12 +91,13 @@ def visualize_path(path, background, path_alpha=0.2, show=True, save=True, total
             ax.scatter(not_seen_points[:, 0], not_seen_points[:, 1], c="g")
         ax.imshow(background.T, origin="lower")
         ax.imshow(path[frame].covered_map.T, origin="lower", alpha=path_alpha)
-        ax.scatter(path[frame].x, path[frame].y, c="r")
         ax.set_xlabel("x")
         ax.set_ylabel("y")
         if frame > 0:
-            x1, y1, x2, y2 = path[frame-1].x, path[frame-1].y, path[frame].x, path[frame].y
-            ax.plot([x1, x2], [y1, y2], c="r")
+            xs = [node.x for node in path[:frame+1]]
+            ys = [node.y for node in path[:frame+1]]
+            ax.scatter(xs, ys, c="r")
+            ax.plot(xs, ys, c="r")
         ax.set_title("step: %d" % frame)
     
     interval = 300
