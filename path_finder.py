@@ -7,9 +7,9 @@ import utils
 from tqdm import tqdm
 
 HERO_RADIUS = 1.5
-MOVE_SPEED = 8
+MOVE_SPEED = 5
 ANGLE_SPEED = np.pi/4
-VISION_RANGE = 15
+VISION_RANGE = 10
 VISION_ANGLE = np.pi/2  # twice of half angle
 VISION_AREA = VISION_RANGE**2 * VISION_ANGLE
 GOAL_PERCENTAGE = 0.6
@@ -33,10 +33,11 @@ class Node:
     def f(self):
         return self.g + self.h
 
+
     def is_goal(self, input_map, interest_points_to_look):
-        percentage = np.sum(self.covered_map) / np.sum(input_map)
-        interest_looked = np.all(self.covered_map[interest_points_to_look[:, 0], interest_points_to_look[:, 1]])
-        return percentage >= GOAL_PERCENTAGE and interest_looked
+        coverage_percentage = np.sum(self.covered_map) / np.sum(input_map)
+        interest_percentage = np.sum(self.covered_map[interest_points_to_look[:, 0], interest_points_to_look[:, 1]])/len(interest_points_to_look)
+        return coverage_percentage >= GOAL_PERCENTAGE and interest_percentage >= GOAL_PERCENTAGE
 
     def __eq__(self, other):
         ans = self.x == other.x and self.y == other.y and self.move_angle == other.move_angle and self.look_angle == other.look_angle
@@ -184,6 +185,7 @@ def heuristic(node, input_map, interest_points_to_look=None):
         return cover_cost
     interest_map = utils.sparse_to_dense_with_default(
         interest_points_to_look, np.zeros_like(input_map), 1)
+    num_interests = np.sum(interest_map)
     not_covered_interest_map = np.logical_and(
         interest_map, np.logical_not(node.covered_map))
     not_covered_indices = np.array(np.where(not_covered_interest_map)).T # shape (n, 2)
@@ -194,10 +196,10 @@ def heuristic(node, input_map, interest_points_to_look=None):
         dist_costs = dist_cost_map[interest_points_to_look[:, 0], interest_points_to_look[:, 1]]
         angle_costs = np.abs(angle_cost_map[interest_points_to_look[:, 0], interest_points_to_look[:, 1]])
         # dist_costs, angle_costs = np.ceil(dist_costs), np.ceil(angle_costs)
-        dist_cost = np.sum(dist_costs) / MOVE_SPEED / 2
-        angle_cost = np.sum(angle_costs) / ANGLE_SPEED / 2 
+        dist_cost = np.sum(dist_costs) / MOVE_SPEED / num_interests
+        angle_cost = np.sum(angle_costs) / ANGLE_SPEED / num_interests
 
-    return cover_cost 
+    return cover_cost + dist_cost + angle_cost
 
 
 def get_start_nodes(input_map, no_collision_map=None):
