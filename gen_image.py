@@ -102,40 +102,27 @@ def generate_rendered_pictures(mesh, extrinsic_trajectory=None, visible_window=T
             param = ctr.convert_to_pinhole_camera_parameters()
             param.extrinsic = extrinsic_trajectory[i]
             # print("input view extrinsic: \n{}".format(param.extrinsic))
-            if O3D_VERSION == "9":
-                ctr.convert_from_pinhole_camera_parameters(param)
-            else:
-                ctr.convert_from_pinhole_camera_parameters(param, True)
         else:
             param = ctr.convert_to_pinhole_camera_parameters()
-            extrinsic = np.array(param.extrinsic).reshape(4, 4)
+            extrinsic = np.array(param.extrinsic)
+            print("input view extrinsic: \n{}".format(extrinsic))
             extrinsic[:3, 3] += np.array([0.1, 0.1, 0.1])
             param.extrinsic = extrinsic
-            if O3D_VERSION == "9":
-                ctr.convert_from_pinhole_camera_parameters(param)
-            else:
-                ctr.convert_from_pinhole_camera_parameters(param, True)
-        # print("result view extrinsic: \n{}".format(
-        #     ctr.convert_to_pinhole_camera_parameters().extrinsic))
+        if O3D_VERSION == "9":
+            ctr.convert_from_pinhole_camera_parameters(param)
+        else:
+            ctr.convert_from_pinhole_camera_parameters(param, True)
+        print("result view extrinsic: \n{}".format(
+            ctr.convert_to_pinhole_camera_parameters().extrinsic))
         vis.poll_events()
         vis.update_renderer()
         vis.capture_screen_image(os.path.join(
-            render_output_dir, "screenshot_{}.png".format(i)))
+            render_output_dir, "screenshot_{}.png".format(i)), True)
         if wait_time > 0:
             time.sleep(wait_time)
     print("finished rendering %d images" % num_views)
     vis.destroy_window()
 
-
-# generate_rendered_pictures(mesh)
-
-
-# extrinsic_trajectory = []
-# for obb_idx in range(len(seg_groups)):
-#     obb = seg_groups[obb_idx]["obb"]
-#     extrinsic_trajectory.append(utils.compute_camera_extrinsic(world_center + np.array([0, 0, -0.5]) , obb))
-# generate_rendered_pictures(mesh, extrinsic_trajectory[:1])
-# utils.compute_2d_projection(mesh)
 
 def make_camera_trajectory(point_cloud, height, pillar_resolution=0.1, num_views=20):
     output_trajectory = []
@@ -193,4 +180,6 @@ if __name__ == "__main__":
     extrinsic_trajectory = make_camera_trajectory(
         point_cloud, height=0.2, pillar_resolution=0.1, num_views=20)
     generate_rendered_pictures(mesh, extrinsic_trajectory)
+    # generate_rendered_pictures(mesh)
     utils.visualize_camera_extrinsics(mesh, extrinsic_trajectory)
+
