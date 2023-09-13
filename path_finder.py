@@ -15,32 +15,6 @@ VISION_AREA = VISION_RANGE**2 * VISION_ANGLE
 GOAL_PERCENTAGE = 0.6
 
 
-class MyList(dict):
-    def __init__(self, *args, **kw):
-        super().__init__(*args, **kw)
-
-    def __getitem__(self, idx):
-        key = list(self.keys())[idx]
-        return super().__getitem__(key)
-
-    def append(self, value):
-        key = hash(value)
-        self[key] = value
-
-    def extend(self, values):
-        for value in values:
-            self.append(value)
-
-    def __contains__(self, __value: object) -> bool:
-        key = hash(__value)
-        return super().__contains__(key)
-    
-    def remove(self, __value: object) -> None:
-        key = hash(__value)
-        super().__delitem__(key)
-    
-    def sort(self, key=None, reverse=False):
-        self.__dict__ = dict(sorted(self.__dict__.items(), key=key, reverse=reverse))
 
 
 class Node:
@@ -93,8 +67,8 @@ def astar_search(start_points, input_map, no_collision_map=None, interest_points
     else:
         interest_points_to_look = np.empty((0, 2), dtype=np.int32)
 
-    open_list = MyList()
-    closed_list = []
+    open_list = utils.QuickList()
+    closed_list = utils.QuickList()
     open_list.extend(start_points)
     best_coverage = 0
     best_num_viewed_interests = 0
@@ -106,11 +80,10 @@ def astar_search(start_points, input_map, no_collision_map=None, interest_points
         iter_count += 1
         patience_count += 1
         open_list.sort()
-        # print(open_list)
-        # if len(open_list) > max_iter:
-        #     open_list = open_list[:max_iter]
+        while len(open_list) > max_iter:
+            open_list.remove(open_list[-1])
         current_node = open_list[0]
-        print("current node f: %.2f, g: %.2f, h: %.2f" % (current_node.f(), current_node.g, current_node.h))
+        # print("current node f: %.2f, g: %.2f, h: %.2f" % (current_node.f(), current_node.g, current_node.h))
         # print("current node: " + str(current_node))
         current_coverage = np.sum(current_node.covered_map) / np.sum(input_map)
         current_num_viewed_interests = np.sum(current_node.covered_map[interest_points_to_look[:, 0], interest_points_to_look[:, 1]])
@@ -205,7 +178,7 @@ def heuristic(node, input_map, interest_points_to_look=None):
     overall_num = np.sum(input_map)
     covered_num = np.sum(node.covered_map)
     cover_cost = (overall_num - covered_num) / VISION_AREA * 4 # 1 is a hyperparameter to adjust
-    cover_cost = np.ceil(cover_cost)
+    # cover_cost = np.ceil(cover_cost)
     # 估计从当前节点到看见所有感兴趣点的移动和转角代价
     if interest_points_to_look is None:
         return cover_cost
@@ -220,11 +193,11 @@ def heuristic(node, input_map, interest_points_to_look=None):
             node.x, node.y, input_map, node.look_angle)
         dist_costs = dist_cost_map[interest_points_to_look[:, 0], interest_points_to_look[:, 1]]
         angle_costs = np.abs(angle_cost_map[interest_points_to_look[:, 0], interest_points_to_look[:, 1]])
-        dist_costs, angle_costs = np.ceil(dist_costs), np.ceil(angle_costs)
+        # dist_costs, angle_costs = np.ceil(dist_costs), np.ceil(angle_costs)
         dist_cost = np.sum(dist_costs) / MOVE_SPEED / 2
         angle_cost = np.sum(angle_costs) / ANGLE_SPEED / 2 
 
-    return cover_cost + dist_cost + angle_cost
+    return cover_cost 
 
 
 def get_start_nodes(input_map, no_collision_map=None):

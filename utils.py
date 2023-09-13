@@ -908,3 +908,44 @@ def is_in_cone_by_camera_params(pointcloud, intrinsic, extrinsic, hidden_point_r
     return output_indices
 
 
+
+####################################################################################
+# dirty tricks
+####################################################################################
+class QuickList(dict):
+    """
+    A list-like dict, can only be accessed by index
+    """
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+
+    def __getitem__(self, idx):
+        key = list(self.keys())[idx]
+        return super().__getitem__(key)
+
+    def append(self, value):
+        key = hash(value)
+        if key in self:
+            raise ValueError("value already in the list")
+        self[key] = value
+
+    def extend(self, values):
+        for value in values:
+            self.append(value)
+
+    def __contains__(self, __value: object) -> bool:
+        key = hash(__value)
+        return super().__contains__(key)
+
+    def remove(self, __value: object) -> None:
+        key = hash(__value)
+        super().__delitem__(key)
+
+    def remove_by_index(self, idx):
+        key = list(self.keys())[idx]
+        super().__delitem__(key)
+
+    def sort(self, key=None, reverse=False):
+        items = sorted(self.items(), key=key, reverse=reverse)
+        self.clear()
+        self.update(items)
