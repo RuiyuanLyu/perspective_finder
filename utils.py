@@ -49,23 +49,24 @@ def visualize_freqency(data, bins=100, title=None, xlabel=None, ylabel=None):
     plt.close()
 
 
-def visualize_2d_map(data, title=None, xlabel=None, ylabel=None, show=False):
+def visualize_2d_map(data, title=None, xlabel=None, ylabel=None, save=True, show=False):
     plt.imshow(data.T, cmap="gray", origin="lower")
     if xlabel:
         plt.xlabel(xlabel)
     if ylabel:
         plt.ylabel(ylabel)
+    save_name = "2d_map.png"
     if title:
         plt.title(title)
-        plt.savefig(os.path.join(VISUALIZATION_FOLDER, title + ".png"))
-    else:
-        plt.savefig(os.path.join(VISUALIZATION_FOLDER, "2d_map.png"))
+        save_name = title + ".png"
+    if save:
+        plt.savefig(os.path.join(VISUALIZATION_FOLDER, save_name))
     if show:
         plt.show()
     plt.close()
 
 
-def visualize_path(path, background, path_alpha=0.2, show=True, save=True):
+def visualize_path(path, background, path_alpha=0.2, show=True, save=True, total_time=None):
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
     fig, ax = plt.subplots()
@@ -82,7 +83,12 @@ def visualize_path(path, background, path_alpha=0.2, show=True, save=True):
             # print(x1, y1, "->", x2, y2)
             ax.plot([x1, x2], [y1, y2], c="r")
         ax.set_title("step: %d" % frame)
-    ani = FuncAnimation(fig, update, frames=len(path), interval=500)
+    
+    interval = 300
+    if total_time:
+        interval = total_time / len(path)
+    ani = FuncAnimation(fig, update, frames=len(path), interval=interval)
+
     if show:
         plt.show()
     if save:
@@ -356,14 +362,17 @@ def read_extrinsic(file_path, convention='matterport'):
 ####################################################################################
 # 2D map utils
 ####################################################################################
-def pillarize_point_cloud(point_cloud, pillar_size):
+def make_2d_count_map(point_cloud, resolution=0.1):
     """
         point_cloud: o3d.geometry.PointCloud
         pillar_size: float, the size of the pillar
-        return: pillarized point cloud, count map
+
+        return: a tuple of 3 elements: 
+        (1) dense count 2d map, (2) sparse count 2d map,
+        (3) pillar dict (maps from grid index to point indices)
     """
     points = np.array(point_cloud.points)
-    grid_indices = ((points[:,:2] - np.min(points[:,:2], axis=0)) / pillar_size).astype(np.int32)
+    grid_indices = ((points[:,:2] - np.min(points[:,:2], axis=0)) / resolution).astype(np.int32)
     
     pillar_dict = {}
     for i, point in enumerate(points):
@@ -375,26 +384,48 @@ def pillarize_point_cloud(point_cloud, pillar_size):
     pillar_point_counts = {}
     for grid_idx, point_indices in pillar_dict.items():
         pillar_point_counts[grid_idx] = len(point_indices)
-    # visualize_count_freq(list(pillar_point_counts.values()))
-
-    pillared_point_colors = np.zeros((len(points), 3))
-    import matplotlib.cm as cm
-    count_normalizer = np.percentile(list(pillar_point_counts.values()), 75)
-    # print("count_normalizer: {}".format(count_normalizer))
-
     dense_map = sparse_to_dense(pillar_point_counts)
-    dense_map /= count_normalizer
+    # assure that dense map is numpy array
+    return dense_map, pillar_point_counts, pillar_dict
+
+
+def get_2d_dense_edge_touchable_map(dense_count_map, normalization_threshold=0.75, edge_threshold=0.25):
+    """
+        dense_count_map: 2D numpy array
+        normalization_threshold: float, the percentage threshold of the count map
+        edge_threshold: float, the threshold of the edge map
+        return: normalized dense map, edge map, touchable map
+    """
+    assert isinstance(dense_count_map, np.ndarray)
+    counts = dense_count_map.reshape(-1)
+    counts = counts[counts > 0]
+    count_normalizer = np.percentile(counts, normalization_threshold * 100)
+    dense_map = dense_count_map / count_normalizer
     dense_map = np.clip(dense_map, 0, 1)
-    visualize_2d_map(dense_map, title="dense_map")
-    edge_map = double_thresholding(dense_map, 0.25, 1)
-    visualize_2d_map(edge_map, title="edge_map")
+    edge_map = double_thresholding(dense_map, edge_threshold, 1)
     touchable_map = (dense_map > 0) - edge_map
     remove_small_islands(touchable_map, 15)
-    np.save(os.path.join(VISUALIZATION_FOLDER, "touchable_map.npy"), touchable_map)
-    np.save(os.path.join(VISUALIZATION_FOLDER, "edge_map.npy"), edge_map)
-    visualize_2d_map(touchable_map*0.5 + edge_map, title="touchable_map")
+    return dense_map, edge_map, touchable_map
+    
+
+def pillarize_point_cloud(point_cloud, pillar_size=0.1, save=False):
+    """
+        point_cloud: o3d.geometry.PointCloud
+        pillar_size: float, the size of the pillar
+        return: pillarized point cloud, dense count map
+    """
+    dense_count_map, pillar_point_counts, pillar_dict = make_2d_count_map(point_cloud, pillar_size)
+    dense_map, edge_map, touchable_map = get_2d_dense_edge_touchable_map(dense_count_map)
+    visualize_2d_map(dense_map, title="dense_map", save=save)
+    visualize_2d_map(edge_map, title="edge_map", save=save)
+    visualize_2d_map(touchable_map*0.5 + edge_map, title="touchable_map", save=save)
+    if save:
+        np.save(os.path.join(VISUALIZATION_FOLDER, "touchable_map.npy"), touchable_map)
+        np.save(os.path.join(VISUALIZATION_FOLDER, "edge_map.npy"), edge_map)
     
     edge_indices = np.array(np.where(edge_map == 1)).T
+    pillared_point_colors = np.zeros((len(point_cloud.points), 3))
+    import matplotlib.cm as cm
     for grid_idx, point_count in pillar_point_counts.items():
         # color = cm.hot(point_count / count_normalizer)
         color = [0.5, 0.5, 0.5]
@@ -405,7 +436,7 @@ def pillarize_point_cloud(point_cloud, pillar_size):
     pillar_point_cloud = o3d.geometry.PointCloud()
     pillar_point_cloud.points = point_cloud.points
     pillar_point_cloud.colors = o3d.utility.Vector3dVector(np.array(pillared_point_colors))
-    return pillar_point_cloud, dense_map
+    return pillar_point_cloud, dense_count_map
 
 
 def get_island_coordinates(grid, x, y):
@@ -455,6 +486,7 @@ def remove_small_islands(map, threshold):
 def sparse_to_dense(sparse_dict):
     """
         sparse_dict: {grid_idx: value}
+        return: dense map, 2D numpy array
     """
     x, y = np.max(np.array(list(sparse_dict.keys())), axis=0) + 1
     dense_map = np.zeros((x, y))
@@ -529,6 +561,10 @@ def get_dist_map_and_angle_map(x: int, y: int, input_map: np.ndarray, angle: flo
         x, y: the position of the hero
         angle: the towards angle of the hero
         map: the map of the scene, only its shape is used
+
+        return: dist_map, angle_map
+        dist_map: the distance to the hero
+        angle_map: the additional angle hero need to rotate to face the point
     """
     x_map, y_map = np.meshgrid(np.arange(input_map.shape[0]), np.arange(input_map.shape[1]))
     x_map = x_map.T - x
@@ -559,7 +595,11 @@ def compute_no_collision_map(input_map, radius):
 # bezier curve utils
 ####################################################################################
 def bezier_curve_point(control_points, t):
-    # NOTE: 当t以匀速移动时，Q(t)在沿曲线方向上并不是匀速移动。要做到这一点，显然曲线长度是需要考虑的。
+    """
+        control_points: list of points, each point is a numpy array
+        t: float, in the range [0, 1]
+    """
+    # NOTE: 当t以匀速移动时，Q(t)在沿曲线方向上并不是匀速移动。要做到这一点，显然曲线长度是需要考虑的。目前没做
     control_points = np.array(control_points, dtype=np.float64)
     n = len(control_points) - 1
     result = np.zeros_like(control_points[0])
@@ -597,7 +637,7 @@ def draw_bezier():
 
 def subtract_angle(a, b):
     """
-        return the angle between a and b, in the range [-pi, pi]
+        return the angle a - b, in the range [-pi, pi]
     """
     return np.mod(a - b + np.pi, 2*np.pi) - np.pi
 
@@ -614,6 +654,9 @@ def axes_to_rotation(obb):
 
 
 def convert_seg_group(seg_group):
+    """
+        return a dict with keys: obj_id, obj_type, psr
+    """
     obb = seg_group["obb"]
     roll, pitch, yaw = axes_to_rotation(obb)
     main_info = {

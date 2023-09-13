@@ -15,14 +15,15 @@ GOAL_PERCENTAGE = 0.6
 
 
 class Node:
-    def __init__(self, x: int, y: int, angle: float, input_map: np.ndarray, parent: 'Node' = None):
+    def __init__(self, x: int, y: int, move_angle: float, look_angle: float, input_map: np.ndarray, parent: 'Node' = None):
         assert isinstance(input_map, np.ndarray) and input_map.ndim == 2
         self.x = x
         self.y = y
-        self.angle = angle
+        self.move_angle = move_angle
+        self.look_angle = look_angle
         self.parent = parent
         prev_map = parent.covered_map if parent else np.zeros_like(input_map)
-        self.covered_map = get_covered_map(input_map, prev_map, x, y, angle)
+        self.covered_map = get_covered_map(input_map, prev_map, x, y, look_angle)
         self.g = 0  # 抵达这个点已经花掉的实际代价
         self.h = np.inf  # 抵达终点还需要的估计代价
 
@@ -35,14 +36,14 @@ class Node:
         return percentage >= GOAL_PERCENTAGE and interest_looked
 
     def __eq__(self, other):
-        ans = self.x == other.x and self.y == other.y and self.angle == other.angle and np.all(
-            self.covered_map == other.covered_map)
+        ans = self.x == other.x and self.y == other.y and self.move_angle == other.move_angle and self.look_angle == other.look_angle
+        ans = ans and np.all(self.covered_map == other.covered_map)
         # if ans:
         #     print("an equal node found")
         return ans
 
     def __str__(self):
-        return "(%d, %d, %.3f)" % (self.x, self.y, self.angle)
+        return "(x: %d, y: %d, move_angle: %.2f, look_angle: %.2f)" % (self.x, self.y, self.move_angle, self.look_angle)
 
 
 def astar_search(start_points, input_map, no_collision_map=None, interest_points_to_look=None, add_new_seeds=False, max_iter=10000, patience=1000, print_interval=1000):
@@ -69,12 +70,15 @@ def astar_search(start_points, input_map, no_collision_map=None, interest_points
         patience_count += 1
         current_node = min(open_list, key=lambda node: node.f())
         current_coverage = np.sum(current_node.covered_map) / np.sum(input_map)
+        current_num_viewed_interests = np.sum(current_node.covered_map[interest_points_to_look])
         if current_coverage > best_coverage or iter_count % print_interval == 0:
             if current_coverage > best_coverage:
                 best_coverage = current_coverage
                 patience_count = 0
             print("iter %d, current best coverage: %.2f%%" %
                   (iter_count, best_coverage * 100))
+            print("num of interest points viewed: %d/%d" %
+                  (current_num_viewed_interests, len(interest_points_to_look)))
             best_node = current_node
         open_list.remove(current_node)
         closed_list.append(current_node)
@@ -129,7 +133,7 @@ def get_covered_map(input_map: np.ndarray, prev_map: np.ndarray, x: int, y: int,
 def get_neighbors(node, input_map, no_collision_map, move_speed=MOVE_SPEED, angle_speed=ANGLE_SPEED):
     # 返回当前节点的相邻节点
     dist_map, angle_map = utils.get_dist_map_and_angle_map(
-        node.x, node.y, input_map, node.angle)
+        node.x, node.y, input_map, node.move_angle)
     # 限制移动范围和方向
     move_map = np.logical_and(dist_map <= move_speed,
                               np.abs(angle_map) <= angle_speed)
@@ -139,12 +143,16 @@ def get_neighbors(node, input_map, no_collision_map, move_speed=MOVE_SPEED, angl
     # utils.visualize_2d_map(map_to_show, show=True)
     # 生成相邻节点
     neighbors = []
+    # utils.visualize_2d_map(input_map_to_show, save=False, show=True)
     for i in range(feasible_map.shape[0]):
         for j in range(feasible_map.shape[1]):
             if feasible_map[i, j]:
-                new_angle = utils.subtract_angle(angle_map[i, j], -node.angle)
-                neighbors.append(Node(i, j, new_angle, input_map, node))
-                # print("new neighbor:" + str(neighbors[-1]))
+                new_move_angle = utils.subtract_angle(angle_map[i, j], -node.move_angle)
+                # get the new look angle
+                for k in range(5):
+                    new_look_angle = utils.subtract_angle(node.look_angle, (k-2)*angle_speed)
+                    neighbors.append(Node(i, j, new_move_angle, new_look_angle, input_map, node))
+                    # print("new neighbor:" + str(neighbors[-1]))
 
     return neighbors
 
@@ -193,14 +201,14 @@ def get_start_nodes(input_map, no_collision_map=None):
         # now select a random point
         seed = np.random.choice(len(max_points))
         x, y = max_points[seed]
-        new_node = Node(x, y, angle, input_map)
+        new_node = Node(x, y, angle, angle, input_map)
         new_node.h = heuristic(new_node, input_map)
         output_nodes.append(new_node)
         print(output_nodes[-1])
     return output_nodes
 
 
-def find_path(input_map, no_collision_map=None, interest_points_to_look=None, add_new_seeds=False, max_iter=10000, patience=1000, print_interval=1000):
+def find_path(input_map, no_collision_map=None, interest_points_to_look=None, add_new_seeds=False, max_iter=10000, patience=100, print_interval=1000):
     if no_collision_map is None:
         no_collision_map = utils.compute_no_collision_map(
             input_map, HERO_RADIUS)
@@ -211,6 +219,10 @@ def find_path(input_map, no_collision_map=None, interest_points_to_look=None, ad
 
 
 if __name__ == "__main__":
-    MAP = np.load("touchable_map.npy")
+    import open3d as o3d
+    PCD_FILE = "/datax/3rscan/0a4b8ef6-a83a-21f2-8672-dce34dd0d7ca/labels.instances.annotated.v2.ply"
+    PCD = o3d.io.read_point_cloud(PCD_FILE)
+    count_map, _, _ = utils.make_2d_count_map(PCD, 0.1)
+    _, _, MAP = utils.get_2d_dense_edge_touchable_map(count_map, 0.70)
     path = find_path(MAP)
     utils.visualize_path(path, MAP)

@@ -112,8 +112,8 @@ def generate_rendered_pictures(mesh, extrinsic_trajectory=None, visible_window=T
             ctr.convert_from_pinhole_camera_parameters(param)
         else:
             ctr.convert_from_pinhole_camera_parameters(param, True)
-        print("result view extrinsic: \n{}".format(
-            ctr.convert_to_pinhole_camera_parameters().extrinsic))
+        # print("result view extrinsic: \n{}".format(
+        #     ctr.convert_to_pinhole_camera_parameters().extrinsic))
         vis.poll_events()
         vis.update_renderer()
         vis.capture_screen_image(os.path.join(
@@ -124,7 +124,15 @@ def generate_rendered_pictures(mesh, extrinsic_trajectory=None, visible_window=T
     vis.destroy_window()
 
 
-def make_camera_trajectory(point_cloud, height, pillar_resolution=0.1, num_views=20):
+def make_camera_trajectory(point_cloud, height, interest_points=None, pillar_resolution=0.1, num_views=20):
+    """
+        point_cloud: open3d.geometry.PointCloud
+        height: float, the height of the camera
+        interest_points: np.ndarray, shape (n, 3), the points to look at
+        pillar_resolution: float, the resolution of the pillarization
+        num_views: int, the number of views to generate
+        return: a list of extrinsic matrices, each is a 4x4 numpy array, world coordinate -> camera coordinate
+    """
     output_trajectory = []
     x_min, y_min = np.min(np.array(point_cloud.points), axis=0)[:2]
     pillarized_point_cloud, pillarized_count_map = utils.pillarize_point_cloud(
@@ -135,11 +143,13 @@ def make_camera_trajectory(point_cloud, height, pillar_resolution=0.1, num_views
     edge_map = utils.double_thresholding(dense_map, 0.25, 1)
     touchable_map = (dense_map > 0) - edge_map
     utils.remove_small_islands(touchable_map, 15)
-    path = find_path(touchable_map)
+    if interest_points is not None:
+        interest_points = ((interest_points[:,:2] - np.min(point_cloud.points[:,:2], axis=0)) / pillar_resolution).astype(np.int32)
+    path = find_path(touchable_map, interest_points_to_look=interest_points)
     utils.visualize_path(path, edge_map + touchable_map*0.3, show=False)
     control_points = []
     for node in path:
-        x, y, theta = node.x, node.y, node.angle
+        x, y = node.x, node.y
         x = x * pillar_resolution + pillar_resolution / 2 + x_min
         y = y * pillar_resolution + pillar_resolution / 2 + y_min
         control_points.append([x, y])
@@ -167,7 +177,8 @@ if __name__ == "__main__":
     seg_groups = [seg_group for seg_group in seg_groups if seg_group["label"]
                   not in instance_labels_to_remove]
     for seg_group in seg_groups:
-        print(seg_group["label"])
+        center = seg_group["obb"]["centroid"]
+        print("object: %s, center: x:%.3f y:%.3f z:%.3f" % (seg_group["label"], center[0], center[1], center[2]))
     point_cloud = o3d.io.read_point_cloud(
         os.path.join(DATA_DIR, SEMANTIC_VISUAL_FILE))
 
@@ -178,7 +189,7 @@ if __name__ == "__main__":
     world_center = (np.max(np.array(mesh.vertices), axis=0) +
                     np.min(np.array(mesh.vertices), axis=0))/2
     extrinsic_trajectory = make_camera_trajectory(
-        point_cloud, height=0.2, pillar_resolution=0.1, num_views=20)
+        point_cloud, height=0.2, pillar_resolution=0.1, num_views=20, interest_points=np.array(main_info)[:, :3])
     generate_rendered_pictures(mesh, extrinsic_trajectory)
     # generate_rendered_pictures(mesh)
     utils.visualize_camera_extrinsics(mesh, extrinsic_trajectory)
